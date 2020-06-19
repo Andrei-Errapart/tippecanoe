@@ -96,6 +96,12 @@ char **av;
 
 std::vector<clipbbox> clipbboxes;
 
+#if defined(_WIN32)
+#	define	DEV_NULL "NUL"
+#else
+#	define	DEV_NULL "/dev/null"
+#endif
+
 void checkdisk(std::vector<struct reader> *r) {
 	long long used = 0;
 	for (size_t i = 0; i < r->size(); i++) {
@@ -194,7 +200,7 @@ void init_cpus() {
 	long long fds[MAX_FILES];
 	long long i;
 	for (i = 0; i < MAX_FILES; i++) {
-		fds[i] = open("/dev/null", O_RDONLY | O_CLOEXEC);
+		fds[i] = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
 		if (fds[i] < 0) {
 			break;
 		}
@@ -208,7 +214,7 @@ void init_cpus() {
 	}
 
 	// Scale down because we really don't want to run the system out of files
-	MAX_FILES = i * 3 / 4;
+	MAX_FILES = (i==0 ? MAX_FILES : i) * 3 / 4;
 	if (MAX_FILES < 32) {
 		fprintf(stderr, "Can't open a useful number of files: %lld\n", MAX_FILES);
 		exit(EXIT_FAILURE);
@@ -1319,9 +1325,9 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 	double dist_sum = 0;
 	size_t dist_count = 0;
 
-	int files_open_before_reading = open("/dev/null", O_RDONLY | O_CLOEXEC);
+	int files_open_before_reading = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
 	if (files_open_before_reading < 0) {
-		perror("open /dev/null");
+		perror("open " DEV_NULL);
 		exit(EXIT_FAILURE);
 	}
 	if (close(files_open_before_reading) != 0) {
@@ -1677,9 +1683,9 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 		}
 	}
 
-	int files_open_after_reading = open("/dev/null", O_RDONLY | O_CLOEXEC);
+	int files_open_after_reading = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
 	if (files_open_after_reading < 0) {
-		perror("open /dev/null");
+		perror("open " DEV_NULL);
 		exit(EXIT_FAILURE);
 	}
 	if (close(files_open_after_reading) != 0) {
@@ -2472,7 +2478,7 @@ int main(int argc, char **argv) {
 	double droprate = 2.5;
 	double gamma = 0;
 	int buffer = 5;
-	const char *tmpdir = "/tmp";
+	const char *tmpdir = getenv("TEMP");
 	const char *attribution = NULL;
 	std::vector<source> sources;
 	const char *prefilter = NULL;
@@ -2487,6 +2493,13 @@ int main(int argc, char **argv) {
 	int read_parallel = 0;
 	int files_open_at_start;
 	json_object *filter = NULL;
+
+	if (tmpdir == nullptr) {
+		tmpdir = getenv("TMP");
+	}
+	if (tmpdir == nullptr) {
+		tmpdir = "/tmp";
+	}
 
 	for (i = 0; i < 256; i++) {
 		prevent[i] = 0;
@@ -3068,9 +3081,9 @@ int main(int argc, char **argv) {
 
 	signal(SIGPIPE, SIG_IGN);
 
-	files_open_at_start = open("/dev/null", O_RDONLY | O_CLOEXEC);
+	files_open_at_start = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
 	if (files_open_at_start < 0) {
-		perror("open /dev/null");
+		perror("open " DEV_NULL);
 		exit(EXIT_FAILURE);
 	}
 	if (close(files_open_at_start) != 0) {
@@ -3190,7 +3203,7 @@ int main(int argc, char **argv) {
 	muntrace();
 #endif
 
-	i = open("/dev/null", O_RDONLY | O_CLOEXEC);
+	i = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
 	// i < files_open_at_start is not an error, because reading from a pipe closes stdin
 	if (i > files_open_at_start) {
 		fprintf(stderr, "Internal error: did not close all files: %d\n", i);
