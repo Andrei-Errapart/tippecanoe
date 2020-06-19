@@ -1799,6 +1799,10 @@ long long write_tile(FILE *geoms, std::atomic<long long> *geompos_in, char *meta
 		}
 
 		if (prefilter != NULL) {
+#if defined(_WIN32)
+				fprintf(stderr, "Filters not supported on Windows.\n");
+				exit(EXIT_FAILURE);
+#endif
 			setup_filter(prefilter, &prefilter_write, &prefilter_read, &prefilter_pid, z, tx, ty);
 			prefilter_fp = fdopen(prefilter_write, "w");
 			if (prefilter_fp == NULL) {
@@ -2062,6 +2066,7 @@ long long write_tile(FILE *geoms, std::atomic<long long> *geompos_in, char *meta
 			}
 		}
 
+#if !defined(_WIN32)
 		if (prefilter != NULL) {
 			json_end(prefilter_jp);
 			if (fclose(prefilter_read_fp) != 0) {
@@ -2084,6 +2089,7 @@ long long write_tile(FILE *geoms, std::atomic<long long> *geompos_in, char *meta
 				exit(EXIT_FAILURE);
 			}
 		}
+#endif
 
 		first_time = false;
 		bool merge_successful = true;

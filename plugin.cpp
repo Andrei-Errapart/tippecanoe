@@ -525,6 +525,10 @@ serial_feature parse_feature(json_pull *jp, int z, unsigned x, unsigned y, std::
 static pthread_mutex_t pipe_lock = PTHREAD_MUTEX_INITIALIZER;
 
 void setup_filter(const char *filter, int *write_to, int *read_from, pid_t *pid, unsigned z, unsigned x, unsigned y) {
+#if defined(_WIN32)
+	fprintf(stderr, "Filters do not work on Windows (yet)\n");
+	exit(EXIT_FAILURE);
+#else
 	// This will create two pipes, a new thread, and a new process.
 	//
 	// The new process will read from one pipe and write to the other, and execute the filter.
@@ -616,9 +620,14 @@ void setup_filter(const char *filter, int *write_to, int *read_from, pid_t *pid,
 		*write_to = pipe_orig[1];
 		*read_from = pipe_filtered[0];
 	}
+#endif
 }
 
 std::vector<mvt_layer> filter_layers(const char *filter, std::vector<mvt_layer> &layers, unsigned z, unsigned x, unsigned y, std::vector<std::map<std::string, layermap_entry>> *layermaps, size_t tiling_seg, std::vector<std::vector<std::string>> *layer_unmaps, int extent) {
+#if defined(_WIN32)
+	fprintf(stderr, "Filters do not work on Windows (yet)\n");
+	exit(EXIT_FAILURE);
+#else
 	int write_to, read_from;
 	pid_t pid;
 	setup_filter(filter, &write_to, &read_from, &pid, z, x, y);
@@ -657,4 +666,5 @@ std::vector<mvt_layer> filter_layers(const char *filter, std::vector<mvt_layer> 
 	}
 
 	return nlayers;
+#endif
 }
