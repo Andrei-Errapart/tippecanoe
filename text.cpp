@@ -1,4 +1,5 @@
 #include "text.hpp"
+#include <stdarg.h>
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
@@ -168,4 +169,73 @@ std::string format_commandline(int argc, char **argv) {
 	}
 
 	return out;
+}
+
+void vssprintf(std::string& buf, const char* fmt, va_list		ap)
+{
+#if defined(__GNUC__)
+	// vasprintf is in fact GNU C extension.
+	char* strp = 0;
+	const int	n = vasprintf(&strp, fmt, ap);
+	if (n == -1) {
+		buf.resize(0);
+	}
+	else {
+		buf = strp;
+		free(strp);
+	}
+#else
+	buf.resize(strlen(fmt) + 20);
+	for (;;) {
+		// the manual says that "va_list ap" is undefined after use.
+		// however, on x86 and/or win32 we can get away with that and avoid malloc/free penalty of vasprintf.
+		// note: \0 at the end is not counted by vsnprintf, it will be counted explicitly.
+#if defined(_MSC_VER)
+		const int	n = _vsnprintf_s(&buf[0], buf.size(), _TRUNCATE, fmt, ap);
+#else
+		const int	n = vsnprintf(&buf[0], buf.size(), fmt, ap);
+#endif
+		if (n >= 0 && n < static_cast<int>(buf.size())) {
+			// yes, finished.
+			buf.resize(n);
+			break;
+		}
+		else {
+			if (n > 0) {
+				// vsnprintf told us how much to use.
+				buf.resize(n + 1);
+			}
+			else {
+				// guesswork.
+				buf.resize(2 * buf.size() + 1);
+			}
+		}
+	}
+#endif
+}
+
+std::string vssprintf(const char* fmt, va_list		ap)
+{
+	std::string	buf;
+	vssprintf(buf, fmt, ap);
+	return buf;
+}
+
+void ssprintf(std::string& buf, const char* fmt, ...)
+{
+	va_list	ap;
+	va_start(ap, fmt);
+	vssprintf(buf, fmt, ap);
+	va_end(ap);
+}
+
+std::string ssprintf(const char* fmt, ...)
+{
+	std::string	buf;
+	va_list		ap;
+
+	va_start(ap, fmt);
+	vssprintf(buf, fmt, ap);
+	va_end(ap);
+	return buf;
 }
