@@ -197,7 +197,7 @@ void init_cpus() {
 	// MacOS can run out of system file descriptors
 	// even if we stay under the rlimit, so try to
 	// find out the real limit.
-	long long fds[MAX_FILES];
+	std::vector<long long> fds(MAX_FILES);
 	long long i;
 	for (i = 0; i < MAX_FILES; i++) {
 		fds[i] = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
@@ -401,7 +401,7 @@ void *run_sort(void *v) {
 }
 
 void do_read_parallel(char *map, long long len, long long initial_offset, const char *reading, std::vector<struct reader> *readers, std::atomic<long long> *progress_seq, std::set<std::string> *exclude, std::set<std::string> *include, int exclude_all, int basezoom, int source, std::vector<std::map<std::string, layermap_entry> > *layermaps, int *initialized, unsigned *initial_x, unsigned *initial_y, int maxzoom, std::string layername, bool uses_gamma, std::map<std::string, int> const *attribute_types, int separator, double *dist_sum, size_t *dist_count, bool want_dist, bool filters) {
-	long long segs[CPUS + 1];
+	std::vector<long long> segs(CPUS + 1);
 	segs[0] = 0;
 	segs[CPUS] = len;
 
@@ -413,10 +413,10 @@ void do_read_parallel(char *map, long long len, long long initial_offset, const 
 		}
 	}
 
-	double dist_sums[CPUS];
-	size_t dist_counts[CPUS];
+	std::vector<double> dist_sums(CPUS);
+	std::vector<size_t> dist_counts(CPUS);
 
-	std::atomic<long long> layer_seq[CPUS];
+	std::vector<std::atomic<long long>> layer_seq(CPUS);
 	for (size_t i = 0; i < CPUS; i++) {
 		// To preserve feature ordering, unique id for each segment
 		// begins with that segment's offset into the input
@@ -429,7 +429,7 @@ void do_read_parallel(char *map, long long len, long long initial_offset, const 
 	std::vector<serialization_state> sst;
 	sst.resize(CPUS);
 
-	pthread_t pthreads[CPUS];
+	std::vector<pthread_t> pthreads(CPUS);
 	std::vector<std::set<type_and_string> > file_subkeys;
 
 	for (size_t i = 0; i < CPUS; i++) {
@@ -693,20 +693,20 @@ void radix1(int *geomfds_in, int *indexfds_in, int inputs, int prefix, int split
 	int splitbits = log(splits) / log(2);
 	splits = 1 << splitbits;
 
-	FILE *geomfiles[splits];
-	FILE *indexfiles[splits];
-	int geomfds[splits];
-	int indexfds[splits];
-	std::atomic<long long> sub_geompos[splits];
+	std::vector<FILE*> geomfiles(splits);
+	std::vector<FILE*> indexfiles(splits);
+	std::vector<int> geomfds(splits);
+	std::vector<int> indexfds(splits);
+	std::vector<std::atomic<long long>> sub_geompos(splits);
 
 	int i;
 	for (i = 0; i < splits; i++) {
 		sub_geompos[i] = 0;
 
-		char geomname[strlen(tmpdir) + strlen("/geom.XXXXXXXX") + 1];
-		sprintf(geomname, "%s%s", tmpdir, "/geom.XXXXXXXX");
-		char indexname[strlen(tmpdir) + strlen("/index.XXXXXXXX") + 1];
-		sprintf(indexname, "%s%s", tmpdir, "/index.XXXXXXXX");
+		std::string s_geomname = ssprintf("%s%s", tmpdir, "/geom.XXXXXXXX");
+		char* geomname = &s_geomname[0];
+		std::string s_indexname = ssprintf("%s%s", tmpdir, "/index.XXXXXXXX");
+		char* indexname = &s_indexname[0];
 
 		geomfds[i] = mkstemp_cloexec(geomname);
 		if (geomfds[i] < 0) {
@@ -854,13 +854,13 @@ void radix1(int *geomfds_in, int *indexfds_in, int inputs, int prefix, int split
 				}
 
 				size_t nmerges = (indexpos + unit - 1) / unit;
-				struct mergelist merges[nmerges];
+				std::vector<struct mergelist> merges(nmerges);
 
 				for (size_t a = 0; a < nmerges; a++) {
 					merges[a].start = merges[a].end = 0;
 				}
 
-				pthread_t pthreads[CPUS];
+				std::vector<pthread_t> pthreads(CPUS);
 				std::vector<sort_arg> args;
 
 				for (size_t a = 0; a < CPUS; a++) {
@@ -868,7 +868,7 @@ void radix1(int *geomfds_in, int *indexfds_in, int inputs, int prefix, int split
 						a,
 						CPUS,
 						indexpos,
-						merges,
+						&merges[0],
 						indexfds[i],
 						nmerges,
 						unit,
@@ -906,7 +906,7 @@ void radix1(int *geomfds_in, int *indexfds_in, int inputs, int prefix, int split
 				madvise(geommap, geomst.st_size, MADV_RANDOM);
 				madvise(geommap, geomst.st_size, MADV_WILLNEED);
 
-				merge(merges, nmerges, (unsigned char *) indexmap, indexfile, bytes, geommap, geomfile, geompos_out, progress, progress_max, progress_reported, maxzoom, gamma, ds);
+				merge(&merges[0], nmerges, (unsigned char *) indexmap, indexfile, bytes, geommap, geomfile, geompos_out, progress, progress_max, progress_reported, maxzoom, gamma, ds);
 
 				madvise(indexmap, indexst.st_size, MADV_DONTNEED);
 				if (munmap(indexmap, indexst.st_size) < 0) {
@@ -1063,8 +1063,8 @@ void radix(std::vector<struct reader> &readers, int nreaders, FILE *geomfile, FI
 	mem /= 2;
 
 	long long geom_total = 0;
-	int geomfds[nreaders];
-	int indexfds[nreaders];
+	std::vector<int> geomfds(nreaders);
+	std::vector<int> indexfds(nreaders);
 	for (int i = 0; i < nreaders; i++) {
 		geomfds[i] = readers[i].geomfd;
 		indexfds[i] = readers[i].indexfd;
@@ -1077,12 +1077,12 @@ void radix(std::vector<struct reader> &readers, int nreaders, FILE *geomfile, FI
 		geom_total += geomst.st_size;
 	}
 
-	struct drop_state ds[maxzoom + 1];
-	prep_drop_states(ds, maxzoom, basezoom, droprate);
+	std::vector<struct drop_state> ds(maxzoom + 1);
+	prep_drop_states(&ds[0], maxzoom, basezoom, droprate);
 
 	long long progress = 0, progress_max = geom_total, progress_reported = -1;
 	long long availfiles_before = availfiles;
-	radix1(geomfds, indexfds, nreaders, 0, splits, mem, tmpdir, &availfiles, geomfile, indexfile, geompos, &progress, &progress_max, &progress_reported, maxzoom, basezoom, droprate, gamma, ds);
+	radix1(&geomfds[0], &indexfds[0], nreaders, 0, splits, mem, tmpdir, &availfiles, geomfile, indexfile, geompos, &progress, &progress_max, &progress_reported, maxzoom, basezoom, droprate, gamma, &ds[0]);
 
 	if (availfiles - 2 * nreaders != availfiles_before) {
 		fprintf(stderr, "Internal error: miscounted available file descriptors: %lld vs %lld\n", availfiles - 2 * nreaders, availfiles);
@@ -1149,17 +1149,16 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 	for (size_t i = 0; i < CPUS; i++) {
 		struct reader *r = &readers[i];
 
-		char metaname[strlen(tmpdir) + strlen("/meta.XXXXXXXX") + 1];
-		char poolname[strlen(tmpdir) + strlen("/pool.XXXXXXXX") + 1];
-		char treename[strlen(tmpdir) + strlen("/tree.XXXXXXXX") + 1];
-		char geomname[strlen(tmpdir) + strlen("/geom.XXXXXXXX") + 1];
-		char indexname[strlen(tmpdir) + strlen("/index.XXXXXXXX") + 1];
-
-		sprintf(metaname, "%s%s", tmpdir, "/meta.XXXXXXXX");
-		sprintf(poolname, "%s%s", tmpdir, "/pool.XXXXXXXX");
-		sprintf(treename, "%s%s", tmpdir, "/tree.XXXXXXXX");
-		sprintf(geomname, "%s%s", tmpdir, "/geom.XXXXXXXX");
-		sprintf(indexname, "%s%s", tmpdir, "/index.XXXXXXXX");
+		std::string s_metaname = ssprintf("%s%s", tmpdir, "/meta.XXXXXXXX");
+		char* metaname = &s_metaname[0];
+		std::string s_poolname = ssprintf("%s%s", tmpdir, "/pool.XXXXXXXX");
+		char* poolname = &s_poolname[0];
+		std::string s_treename = ssprintf("%s%s", tmpdir, "/tree.XXXXXXXX");
+		char* treename = &s_treename[0];
+		std::string s_geomname = ssprintf("%s%s", tmpdir, "/geom.XXXXXXXX");
+		char* geomname = &s_geomname[0];
+		std::string s_indexname = ssprintf("%s%s", tmpdir, "/index.XXXXXXXX");
+		char* indexname = &s_indexname[0];
 
 		r->metafd = mkstemp_cloexec(metaname);
 		if (r->metafd < 0) {
@@ -1243,8 +1242,9 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 	std::atomic<long long> progress_seq(0);
 
 	// 2 * CPUS: One per reader thread, one per tiling thread
-	int initialized[2 * CPUS];
-	unsigned initial_x[2 * CPUS], initial_y[2 * CPUS];
+	std::vector<int> initialized(2 * CPUS);
+	std::vector<unsigned> initial_x(2 * CPUS);
+	std::vector<unsigned> initial_y(2 * CPUS);
 	for (size_t i = 0; i < 2 * CPUS; i++) {
 		initialized[i] = initial_x[i] = initial_y[i] = 0;
 	}
@@ -1372,11 +1372,10 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 				exit(EXIT_FAILURE);
 			}
 
-			std::atomic<long long> layer_seq[CPUS];
-			double dist_sums[CPUS];
-			size_t dist_counts[CPUS];
-			std::vector<struct serialization_state> sst;
-			sst.resize(CPUS);
+			std::vector<std::atomic<long long>> layer_seq(CPUS);
+			std::vector<double> dist_sums(CPUS);
+			std::vector<size_t> dist_counts(CPUS);
+			std::vector<struct serialization_state> sst(CPUS);
 
 			for (size_t i = 0; i < CPUS; i++) {
 				layer_seq[i] = overall_offset;
@@ -1428,12 +1427,10 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 		}
 
 		if (sources[source].format == "csv" || (sources[source].file.size() > 4 && sources[source].file.substr(sources[source].file.size() - 4) == std::string(".csv"))) {
-			std::atomic<long long> layer_seq[CPUS];
-			double dist_sums[CPUS];
-			size_t dist_counts[CPUS];
-
-			std::vector<struct serialization_state> sst;
-			sst.resize(CPUS);
+			std::vector<std::atomic<long long>> layer_seq(CPUS);
+			std::vector<double> dist_sums(CPUS);
+			std::vector<size_t> dist_counts(CPUS);
+			std::vector<struct serialization_state> sst(CPUS);
 
 			// XXX factor out this duplicated setup
 			for (size_t i = 0; i < CPUS; i++) {
@@ -1513,7 +1510,7 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 		}
 
 		if (map != NULL && map != MAP_FAILED && read_parallel_this) {
-			do_read_parallel(map, st.st_size - off, overall_offset, reading.c_str(), &readers, &progress_seq, exclude, include, exclude_all, basezoom, layer, &layermaps, initialized, initial_x, initial_y, maxzoom, sources[layer].layer, uses_gamma, attribute_types, read_parallel_this, &dist_sum, &dist_count, guess_maxzoom, prefilter != NULL || postfilter != NULL);
+			do_read_parallel(map, st.st_size - off, overall_offset, reading.c_str(), &readers, &progress_seq, exclude, include, exclude_all, basezoom, layer, &layermaps, &initialized[0], &initial_x[0], &initial_y[0], maxzoom, sources[layer].layer, uses_gamma, attribute_types, read_parallel_this, &dist_sum, &dist_count, guess_maxzoom, prefilter != NULL || postfilter != NULL);
 			overall_offset += st.st_size - off;
 			checkdisk(&readers);
 
@@ -1545,8 +1542,8 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 			if (read_parallel_this) {
 				// Serial reading of chunks that are then parsed in parallel
 
-				char readname[strlen(tmpdir) + strlen("/read.XXXXXXXX") + 1];
-				sprintf(readname, "%s%s", tmpdir, "/read.XXXXXXXX");
+				std::string s_readname = ssprintf("%s%s", tmpdir, "/read.XXXXXXXX");
+				char* readname = &s_readname[0];
 				int readfd = mkstemp_cloexec(readname);
 				if (readfd < 0) {
 					perror(readname);
@@ -1591,7 +1588,7 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 							}
 
 							fflush(readfp);
-							start_parsing(readfd, streamfpopen(readfp), initial_offset, ahead, &is_parsing, &parallel_parser, parser_created, reading.c_str(), &readers, &progress_seq, exclude, include, exclude_all, basezoom, layer, layermaps, initialized, initial_x, initial_y, maxzoom, sources[layer].layer, gamma != 0, attribute_types, read_parallel_this, &dist_sum, &dist_count, guess_maxzoom, prefilter != NULL || postfilter != NULL);
+							start_parsing(readfd, streamfpopen(readfp), initial_offset, ahead, &is_parsing, &parallel_parser, parser_created, reading.c_str(), &readers, &progress_seq, exclude, include, exclude_all, basezoom, layer, layermaps, &initialized[0], &initial_x[0], &initial_y[0], maxzoom, sources[layer].layer, gamma != 0, attribute_types, read_parallel_this, &dist_sum, &dist_count, guess_maxzoom, prefilter != NULL || postfilter != NULL);
 
 							initial_offset += ahead;
 							overall_offset += ahead;
@@ -1628,7 +1625,7 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 				fflush(readfp);
 
 				if (ahead > 0) {
-					start_parsing(readfd, streamfpopen(readfp), initial_offset, ahead, &is_parsing, &parallel_parser, parser_created, reading.c_str(), &readers, &progress_seq, exclude, include, exclude_all, basezoom, layer, layermaps, initialized, initial_x, initial_y, maxzoom, sources[layer].layer, gamma != 0, attribute_types, read_parallel_this, &dist_sum, &dist_count, guess_maxzoom, prefilter != NULL || postfilter != NULL);
+					start_parsing(readfd, streamfpopen(readfp), initial_offset, ahead, &is_parsing, &parallel_parser, parser_created, reading.c_str(), &readers, &progress_seq, exclude, include, exclude_all, basezoom, layer, layermaps, &initialized[0], &initial_x[0], &initial_y[0], maxzoom, sources[layer].layer, gamma != 0, attribute_types, read_parallel_this, &dist_sum, &dist_count, guess_maxzoom, prefilter != NULL || postfilter != NULL);
 
 					if (parser_created) {
 						if (pthread_join(parallel_parser, NULL) != 0) {
@@ -1733,14 +1730,14 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 	// segment+offset to find the data.
 
 	// 2 * CPUS: One per input thread, one per tiling thread
-	long long pool_off[2 * CPUS];
-	long long meta_off[2 * CPUS];
+	std::vector<long long> pool_off(2 * CPUS);
+	std::vector<long long> meta_off(2 * CPUS);
 	for (size_t i = 0; i < 2 * CPUS; i++) {
 		pool_off[i] = meta_off[i] = 0;
 	}
 
-	char poolname[strlen(tmpdir) + strlen("/pool.XXXXXXXX") + 1];
-	sprintf(poolname, "%s%s", tmpdir, "/pool.XXXXXXXX");
+	std::string s_poolname = ssprintf("%s%s", tmpdir, "/pool.XXXXXXXX");
+	char* poolname = &s_poolname[0];
 
 	int poolfd = mkstemp_cloexec(poolname);
 	if (poolfd < 0) {
@@ -1756,8 +1753,8 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 
 	unlink(poolname);
 
-	char metaname[strlen(tmpdir) + strlen("/meta.XXXXXXXX") + 1];
-	sprintf(metaname, "%s%s", tmpdir, "/meta.XXXXXXXX");
+	std::string s_metaname = ssprintf("%s%s", tmpdir, "/meta.XXXXXXXX");
+	char* metaname = &s_metaname[0];
 
 	int metafd = mkstemp_cloexec(metaname);
 	if (metafd < 0) {
@@ -1839,8 +1836,8 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 		madvise(stringpool, poolpos, MADV_RANDOM);
 	}
 
-	char indexname[strlen(tmpdir) + strlen("/index.XXXXXXXX") + 1];
-	sprintf(indexname, "%s%s", tmpdir, "/index.XXXXXXXX");
+	std::string s_indexname = ssprintf("%s%s", tmpdir, "/index.XXXXXXXX");
+	char* indexname = &s_indexname[0];
 
 	int indexfd = mkstemp_cloexec(indexname);
 	if (indexfd < 0) {
@@ -1855,8 +1852,8 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 
 	unlink(indexname);
 
-	char geomname[strlen(tmpdir) + strlen("/geom.XXXXXXXX") + 1];
-	sprintf(geomname, "%s%s", tmpdir, "/geom.XXXXXXXX");
+	std::string	s_geomname = ssprintf("%s%s", tmpdir, "/geom.XXXXXXXX");
+	char* geomname = &s_geomname[0];
 
 	int geomfd = mkstemp_cloexec(geomname);
 	if (geomfd < 0) {
@@ -2230,14 +2227,14 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 		madvise(geom, indexpos, MADV_SEQUENTIAL);
 		madvise(geom, indexpos, MADV_WILLNEED);
 
-		struct drop_state ds[maxzoom + 1];
-		prep_drop_states(ds, maxzoom, basezoom, droprate);
+		std::vector<struct drop_state> ds(maxzoom + 1);
+		prep_drop_states(&ds[0], maxzoom, basezoom, droprate);
 
 		for (long long ip = 0; ip < indices; ip++) {
 			if (ip > 0 && map[ip].start != map[ip - 1].end) {
 				fprintf(stderr, "Mismatched index at %lld: %lld vs %lld\n", ip, map[ip].start, map[ip].end);
 			}
-			int feature_minzoom = calc_feature_minzoom(&map[ip], ds, maxzoom, gamma);
+			int feature_minzoom = calc_feature_minzoom(&map[ip], &ds[0], maxzoom, gamma);
 			geom[map[ip].end - 1] = feature_minzoom;
 		}
 
@@ -2259,8 +2256,8 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 		exit(EXIT_FAILURE);
 	}
 
-	int fd[TEMP_FILES];
-	off_t size[TEMP_FILES];
+	std::vector<int> fd(TEMP_FILES);
+	std::vector<off_t> size(TEMP_FILES);
 
 	fd[0] = geomfd;
 	size[0] = geomst.st_size;
@@ -2272,7 +2269,7 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 
 	std::atomic<unsigned> midx(0);
 	std::atomic<unsigned> midy(0);
-	int written = traverse_zooms(fd, size, meta, stringpool, &midx, &midy, maxzoom, minzoom, outdb, outdir, buffer, fname, tmpdir, gamma, full_detail, low_detail, min_detail, meta_off, pool_off, initial_x, initial_y, simplification, layermaps, prefilter, postfilter, attribute_accum, filter);
+	int written = traverse_zooms(&fd[0], &size[0], meta, stringpool, &midx, &midy, maxzoom, minzoom, outdb, outdir, buffer, fname, tmpdir, gamma, full_detail, low_detail, min_detail, &meta_off[0], &pool_off[0], &initial_x[0], &initial_y[0], simplification, layermaps, prefilter, postfilter, attribute_accum, filter);
 
 	if (maxzoom != written) {
 		if (written > minzoom) {

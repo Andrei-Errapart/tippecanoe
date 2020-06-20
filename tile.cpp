@@ -39,6 +39,7 @@
 #include "write_json.hpp"
 #include "milo/dtoa_milo.h"
 #include "evaluator.hpp"
+#include "text.hpp"
 
 extern "C" {
 #include "jsonpull/jsonpull.h"
@@ -1770,8 +1771,8 @@ long long write_tile(FILE *geoms, std::atomic<long long> *geompos_in, char *meta
 		double coalesced_area = 0;
 		drawvec shared_nodes;
 
-		int within[child_shards];
-		std::atomic<long long> geompos[child_shards];
+		std::vector<int> within(child_shards);
+		std::vector<std::atomic<long long>> geompos(child_shards);
 		for (size_t i = 0; i < (size_t) child_shards; i++) {
 			geompos[i] = 0;
 			within[i] = 0;
@@ -1830,10 +1831,10 @@ long long write_tile(FILE *geoms, std::atomic<long long> *geompos_in, char *meta
 			rpa.along = along;
 			rpa.alongminus = alongminus;
 			rpa.buffer = buffer;
-			rpa.within = within;
+			rpa.within = &within[0];
 			rpa.first_time = &first_time;
 			rpa.geomfile = geomfile;
-			rpa.geompos = geompos;
+			rpa.geompos = &geompos[0];
 			rpa.oprogress = &oprogress;
 			rpa.todo = todo;
 			rpa.fname = fname;
@@ -1862,7 +1863,7 @@ long long write_tile(FILE *geoms, std::atomic<long long> *geompos_in, char *meta
 			ssize_t which_partial = -1;
 
 			if (prefilter == NULL) {
-				sf = next_feature(geoms, geompos_in, metabase, meta_off, z, tx, ty, initial_x, initial_y, &original_features, &unclipped_features, nextzoom, maxzoom, minzoom, max_zoom_increment, pass, passes, along, alongminus, buffer, within, &first_time, geomfile, geompos, &oprogress, todo, fname, child_shards, filter, stringpool, pool_off, layer_unmaps);
+				sf = next_feature(geoms, geompos_in, metabase, meta_off, z, tx, ty, initial_x, initial_y, &original_features, &unclipped_features, nextzoom, maxzoom, minzoom, max_zoom_increment, pass, passes, along, alongminus, buffer, &within[0], &first_time, geomfile, &geompos[0], &oprogress, todo, fname, child_shards, filter, stringpool, pool_off, layer_unmaps);
 			} else {
 				sf = parse_feature(prefilter_jp, z, tx, ty, layermaps, tiling_seg, layer_unmaps, postfilter != NULL);
 			}
@@ -2103,7 +2104,7 @@ long long write_tile(FILE *geoms, std::atomic<long long> *geompos_in, char *meta
 			tasks = 1;
 		}
 
-		pthread_t pthreads[tasks];
+		std::vector<pthread_t> pthreads(tasks);
 		std::vector<partial_arg> args;
 		args.resize(tasks);
 		for (int i = 0; i < tasks; i++) {
@@ -2681,11 +2682,11 @@ int traverse_zooms(int *geomfd, off_t *geom_size, char *metabase, char *stringpo
 	for (i = 0; i <= maxzoom; i++) {
 		std::atomic<long long> most(0);
 
-		FILE *sub[TEMP_FILES];
-		int subfd[TEMP_FILES];
+		std::vector<FILE*> sub(TEMP_FILES);
+		std::vector<int> subfd(TEMP_FILES);
 		for (size_t j = 0; j < TEMP_FILES; j++) {
-			char geomname[strlen(tmpdir) + strlen("/geom.XXXXXXXX" XSTRINGIFY(INT_MAX)) + 1];
-			sprintf(geomname, "%s/geom%zu.XXXXXXXX", tmpdir, j);
+			std::string s_geomname = ssprintf("%s/geom%zu.XXXXXXXX", tmpdir, j);
+			char* geomname = &s_geomname[0];
 			subfd[j] = mkstemp_cloexec(geomname);
 			// printf("%s\n", geomname);
 			if (subfd[j] < 0) {
@@ -2795,7 +2796,7 @@ int traverse_zooms(int *geomfd, off_t *geom_size, char *metabase, char *stringpo
 		double zoom_fraction = 1;
 
 		for (size_t pass = start; pass < 2; pass++) {
-			pthread_t pthreads[threads];
+			std::vector<pthread_t> pthreads(threads);
 			std::vector<write_tile_args> args;
 			args.resize(threads);
 			std::atomic<int> running(threads);
@@ -2809,7 +2810,7 @@ int traverse_zooms(int *geomfd, off_t *geom_size, char *metabase, char *stringpo
 				args[thread].outdir = outdir;
 				args[thread].buffer = buffer;
 				args[thread].fname = fname;
-				args[thread].geomfile = sub + thread * (TEMP_FILES / threads);
+				args[thread].geomfile = &sub[thread * (TEMP_FILES / threads)];
 				args[thread].todo = todo;
 				args[thread].along = &along;  // locked with var_lock
 				args[thread].gamma = zoom_gamma;
