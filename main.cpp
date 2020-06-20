@@ -1186,7 +1186,6 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 			perror(indexname);
 			exit(EXIT_FAILURE);
 		}
-
 		r->metafile = fopen_oflag(metaname, "wb", O_WRONLY | O_CLOEXEC);
 		if (r->metafile == NULL) {
 			perror(metaname);
@@ -1345,7 +1344,7 @@ int read_input(std::vector<source> &sources, char *fname, int maxzoom, int minzo
 			fd = 0;
 		} else {
 			reading = sources[source].file;
-			fd = open(sources[source].file.c_str(), O_RDONLY, O_CLOEXEC);
+			fd = open(sources[source].file.c_str(), O_RDONLY | O_CLOEXEC);
 			if (fd < 0) {
 				perror(sources[source].file.c_str());
 				continue;
