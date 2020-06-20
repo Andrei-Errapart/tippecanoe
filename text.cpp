@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 /**
  * Returns an empty string if `s` is valid utf8;
@@ -173,7 +174,7 @@ std::string format_commandline(int argc, char **argv) {
 
 void vssprintf(std::string& buf, const char* fmt, va_list		ap)
 {
-#if defined(__GNUC__)
+#if !defined(_WIN32)
 	// vasprintf is in fact GNU C extension.
 	char* strp = 0;
 	const int	n = vasprintf(&strp, fmt, ap);
